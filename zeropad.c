@@ -39,6 +39,10 @@ int main(int argc, char *argv[]) {
     // Terminal size detection
     printf("terminal size: %d, %d\n", (int)ws.ws_row, (int)ws.ws_col);
 
+    // Cursor position
+    int cx = 0;
+    int cy = 0;
+
     char c;
     while (1) {
         ssize_t bytesRead = read(STDIN_FILENO, &c, 1);
@@ -56,15 +60,19 @@ int main(int argc, char *argv[]) {
                 read(STDIN_FILENO, &c, 1);
                 switch (c) {
                     case 'A':
+                        if (cy > 0) cy--;
                         printf("ARROW UP\r\n");
                         break;
                     case 'B':
+                        if (cy < ws.ws_row - 1) cy++;
                         printf("ARROW DOWN\r\n");
                         break;
                     case 'C':
+                        if (cx < ws.ws_col - 1) cx++;
                         printf("ARROW RIGHT\r\n");
                         break;
                     case 'D':
+                        if (cx > 0) cx--;
                         printf("ARROW LEFT\r\n");
                         break;
                 }
@@ -79,6 +87,10 @@ int main(int argc, char *argv[]) {
 
             printf("key: %c (%d)\r\n", c, (int)bytesRead);
         }
+
+        // Print cursor coordinate
+        printf("\x1b[%d;%dH", cy + 1, cx + 1);
+        printf("X");
     }
     
     // Cleanly reset the terminal
