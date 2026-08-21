@@ -3,6 +3,7 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <string.h>
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -169,7 +170,11 @@ int main(int argc, char *argv[]) {
     // Cursor position & row offset
     int cx = 0;
     int cy = 0;
+    int lastCx = 1;
     int rowOffset = 0;
+
+    char screenBuf[16384];
+    int screenLen = 0;    
 
     char c;
     while (1) {
@@ -178,16 +183,29 @@ int main(int argc, char *argv[]) {
         if (bytesRead == 0)
             continue;
 
+        screenLen = 0;
+
         // Clear the screen and move cursor to top left before printing
         // something else
-        write(STDOUT_FILENO, "\x1b[2J", 4);
-        write(STDOUT_FILENO, "\x1b[H", 3);
-        
-        rowOffset = 110; // temp hardcoded
+        memcpy(screenBuf, "\x1b[2J", 4);
+        memcpy(screenBuf + 4, "\x1b[H", 3);
+        screenLen = 7;
+
+        int rowsDrawn = 0;
         for (int i = rowOffset; i < rowOffset + ws.ws_row; i++) {
             if (i > numLines - 1)
                 break;
-            printf("%s\r\n", lines[i]);
+
+            if (rowsDrawn == ws.ws_row - 1)
+                break;
+
+            size_t lineLen = strlen(lines[i]);
+
+            memcpy(screenBuf + screenLen, lines[i], lineLen);
+            memcpy(screenBuf + screenLen + lineLen, "\r\n", 2);
+            screenLen += lineLen + 2;
+
+            rowsDrawn++;
         }
 
         if (c == '\x1b') {
@@ -196,41 +214,57 @@ int main(int argc, char *argv[]) {
             if (c == '[') {
                 read(STDIN_FILENO, &c, 1);
                 switch (c) {
-                case 'A':
+                case 'A': // ARROW UP
                     if (cy > 0)
                         cy--;
-                    printf("ARROW UP\r\n");
+                    else if (rowOffset > 0)
+                        rowOffset--;
                     break;
-                case 'B':
+                case 'B': // ARROW DOWN
                     if (cy < ws.ws_row - 1)
                         cy++;
-                    printf("ARROW DOWN\r\n");
+                    else if (rowOffset + ws.ws_row - 1 < numLines)
+                        rowOffset++;
                     break;
-                case 'C':
-                    if (cx < ws.ws_col - 1)
+                case 'C': // ARROW RIGHT
+                    if (cx < ws.ws_col - 1) {
                         cx++;
-                    printf("ARROW RIGHT\r\n");
+                        if (cx > lastCx)
+                            lastCx = cx;
+                    }
                     break;
-                case 'D':
-                    if (cx > 0)
+                case 'D': // ARROW LEFT
+                    if (cx > 0) {
                         cx--;
-                    printf("ARROW LEFT\r\n");
+                        if (cx < lastCx)
+                            lastCx = cx;
+                    }
                     break;
                 }
             } else {
-                printf("ESCAPE\r\n");
+                // printf("ESCAPE\r\n");
             }
         } else {
             // Quit
             if (c == 'q')
                 break;
 
-            printf("key: %c (%d)\r\n", c, (int)bytesRead);
+            // printf("key: %c (%d)\r\n", c, (int)bytesRead);
         }
 
-        // Print cursor coordinate
-        printf("\x1b[%d;%dH", cy + 1, cx + 1);
-        printf("X");
+        // Cursor
+        char cursorBuf[32];
+
+        // Cursor column
+
+
+        int cursorLen = snprintf(cursorBuf, sizeof(cursorBuf), "\x1b[%d;%dH", cy + 1, cx + 1);
+
+        memcpy(screenBuf + screenLen, cursorBuf, cursorLen); 
+        screenLen += cursorLen;
+
+        write(STDOUT_FILENO, screenBuf, screenLen);
+        printf("%d\r\n", lastCx);
     }
 
     // Cleanly reset the terminal
