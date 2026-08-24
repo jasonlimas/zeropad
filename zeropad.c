@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
     // Cursor position & row offset
     int cx = 0;
     int cy = 0;
-    int lastCx = 1;
+    int lastCx = 0;
     int rowOffset = 0;
 
     char screenBuf[16384];
@@ -213,27 +213,43 @@ int main(int argc, char *argv[]) {
 
             if (c == '[') {
                 read(STDIN_FILENO, &c, 1);
+                size_t currentLineLen;
+
                 switch (c) {
                 case 'A': // ARROW UP
                     if (cy > 0)
                         cy--;
                     else if (rowOffset > 0)
                         rowOffset--;
+
+                    currentLineLen = strlen(lines[cy]);
+                    if (cx > currentLineLen || lastCx > currentLineLen)
+                        cx = currentLineLen;
+                    else
+                        cx = lastCx;
                     break;
                 case 'B': // ARROW DOWN
                     if (cy < ws.ws_row - 1)
                         cy++;
                     else if (rowOffset + ws.ws_row - 1 < numLines)
                         rowOffset++;
+
+                    currentLineLen = strlen(lines[cy]);
+                    if (cx > currentLineLen || lastCx > currentLineLen)
+                        cx = currentLineLen;
+                    else
+                        cx = lastCx;
                     break;
                 case 'C': // ARROW RIGHT
-                    if (cx < ws.ws_col - 1) {
+                    currentLineLen = strlen(lines[cy]);
+                    if (cx < ws.ws_col - 1 && cx < currentLineLen) {
                         cx++;
                         if (cx > lastCx)
                             lastCx = cx;
                     }
                     break;
                 case 'D': // ARROW LEFT
+                    currentLineLen = strlen(lines[cy]);
                     if (cx > 0) {
                         cx--;
                         if (cx < lastCx)
@@ -255,16 +271,20 @@ int main(int argc, char *argv[]) {
         // Cursor
         char cursorBuf[32];
 
-        // Cursor column
-
+        // Cursor debug
+        // printf("%d,%d,%d (max: %d)\r\n", cx, lastCx, rowOffset, (int)strlen(lines[cy]));
+        char cursorDebug[50];
+        int debug = snprintf(cursorDebug, sizeof(cursorDebug), "\x1b[%d;%dH%d,%d,%d (max: %d)", cy + 1, cx + 1, cx, lastCx, rowOffset, (int)strlen(lines[cy]));
 
         int cursorLen = snprintf(cursorBuf, sizeof(cursorBuf), "\x1b[%d;%dH", cy + 1, cx + 1);
 
-        memcpy(screenBuf + screenLen, cursorBuf, cursorLen); 
-        screenLen += cursorLen;
+        // memcpy(screenBuf + screenLen, cursorBuf, cursorLen); 
+        // screenLen += cursorLen;
+        // TEMP:
+        memcpy(screenBuf + screenLen, cursorDebug, debug);
+        screenLen += debug;
 
         write(STDOUT_FILENO, screenBuf, screenLen);
-        printf("%d\r\n", lastCx);
     }
 
     // Cleanly reset the terminal
