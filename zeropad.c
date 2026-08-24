@@ -27,6 +27,7 @@ int main(int argc, char *argv[]) {
 
     char *lines[] =
         {"Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+         // "super longggggggggggggggggggggggg lineeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
          "Duis ac nulla vel urna auctor convallis et id urna.",
          "Donec consectetur erat et pulvinar molestie.",
          "Maecenas sit amet justo placerat, varius mauris congue, egestas",
@@ -177,16 +178,80 @@ int main(int argc, char *argv[]) {
     int screenLen = 0;    
 
     char c;
+    size_t currentLineLen = strlen(lines[cy]);
     while (1) {
         ssize_t bytesRead = read(STDIN_FILENO, &c, 1);
 
         if (bytesRead == 0)
             continue;
 
-        screenLen = 0;
+        // Read input
+        if (c == '\x1b') {
+            read(STDIN_FILENO, &c, 1);
+
+            if (c == '[') {
+                read(STDIN_FILENO, &c, 1);
+
+                switch (c) {
+                case 'A': // ARROW UP
+                    if (cy > 0) {
+                        cy--;
+                        currentLineLen = strlen(lines[rowOffset + cy]);
+                    }
+                    else if (rowOffset > 0) {
+                        rowOffset--;
+                        currentLineLen = strlen(lines[rowOffset + cy]);
+                    }
+
+                    if (cx > currentLineLen || lastCx > currentLineLen)
+                        cx = currentLineLen;
+                    else
+                        cx = lastCx;
+                    break;
+                case 'B': // ARROW DOWN
+                    if (cy < ws.ws_row - 2) {
+                        cy++;
+                        currentLineLen = strlen(lines[rowOffset + cy]);
+                    }
+                    else if (rowOffset + cy < numLines - 1) {
+                        rowOffset++;
+                        currentLineLen = strlen(lines[rowOffset + cy]);
+                    }
+
+                    if (cx > currentLineLen || lastCx > currentLineLen)
+                        cx = currentLineLen;
+                    else
+                        cx = lastCx;
+                    break;
+                case 'C': // ARROW RIGHT
+                    if (cx < ws.ws_col - 1 && cx < currentLineLen) {
+                        cx++;
+                        if (cx > lastCx)
+                            lastCx = cx;
+                    }
+                    break;
+                case 'D': // ARROW LEFT
+                    if (cx > 0) {
+                        cx--;
+                        if (cx < lastCx)
+                            lastCx = cx;
+                    }
+                    break;
+                }
+            } else {
+                // printf("ESCAPE\r\n");
+            }
+        } else {
+            // Quit
+            if (c == 'q')
+                break;
+
+            // printf("key: %c (%d)\r\n", c, (int)bytesRead);
+        }
 
         // Clear the screen and move cursor to top left before printing
         // something else
+        screenLen = 0;
         memcpy(screenBuf, "\x1b[2J", 4);
         memcpy(screenBuf + 4, "\x1b[H", 3);
         screenLen = 7;
@@ -208,81 +273,23 @@ int main(int argc, char *argv[]) {
             rowsDrawn++;
         }
 
-        if (c == '\x1b') {
-            read(STDIN_FILENO, &c, 1);
-
-            if (c == '[') {
-                read(STDIN_FILENO, &c, 1);
-                size_t currentLineLen;
-
-                switch (c) {
-                case 'A': // ARROW UP
-                    if (cy > 0)
-                        cy--;
-                    else if (rowOffset > 0)
-                        rowOffset--;
-
-                    currentLineLen = strlen(lines[cy]);
-                    if (cx > currentLineLen || lastCx > currentLineLen)
-                        cx = currentLineLen;
-                    else
-                        cx = lastCx;
-                    break;
-                case 'B': // ARROW DOWN
-                    if (cy < ws.ws_row - 1)
-                        cy++;
-                    else if (rowOffset + ws.ws_row - 1 < numLines)
-                        rowOffset++;
-
-                    currentLineLen = strlen(lines[cy]);
-                    if (cx > currentLineLen || lastCx > currentLineLen)
-                        cx = currentLineLen;
-                    else
-                        cx = lastCx;
-                    break;
-                case 'C': // ARROW RIGHT
-                    currentLineLen = strlen(lines[cy]);
-                    if (cx < ws.ws_col - 1 && cx < currentLineLen) {
-                        cx++;
-                        if (cx > lastCx)
-                            lastCx = cx;
-                    }
-                    break;
-                case 'D': // ARROW LEFT
-                    currentLineLen = strlen(lines[cy]);
-                    if (cx > 0) {
-                        cx--;
-                        if (cx < lastCx)
-                            lastCx = cx;
-                    }
-                    break;
-                }
-            } else {
-                // printf("ESCAPE\r\n");
-            }
-        } else {
-            // Quit
-            if (c == 'q')
-                break;
-
-            // printf("key: %c (%d)\r\n", c, (int)bytesRead);
-        }
 
         // Cursor
         char cursorBuf[32];
 
         // Cursor debug
         // printf("%d,%d,%d (max: %d)\r\n", cx, lastCx, rowOffset, (int)strlen(lines[cy]));
-        char cursorDebug[50];
-        int debug = snprintf(cursorDebug, sizeof(cursorDebug), "\x1b[%d;%dH%d,%d,%d (max: %d)", cy + 1, cx + 1, cx, lastCx, rowOffset, (int)strlen(lines[cy]));
+        // These 2 lines are temporary
+        // char cursorDebug[50];
+        // int debug = snprintf(cursorDebug, sizeof(cursorDebug), "\x1b[%d;%dH%d,%d,%d (max: %d)", cy + 1, cx + 1, cx, lastCx, rowOffset, (int)strlen(lines[cy + rowOffset]));
 
         int cursorLen = snprintf(cursorBuf, sizeof(cursorBuf), "\x1b[%d;%dH", cy + 1, cx + 1);
 
-        // memcpy(screenBuf + screenLen, cursorBuf, cursorLen); 
-        // screenLen += cursorLen;
+        memcpy(screenBuf + screenLen, cursorBuf, cursorLen); 
+        screenLen += cursorLen;
         // TEMP:
-        memcpy(screenBuf + screenLen, cursorDebug, debug);
-        screenLen += debug;
+        // memcpy(screenBuf + screenLen, cursorDebug, debug);
+        // screenLen += debug;
 
         write(STDOUT_FILENO, screenBuf, screenLen);
     }
